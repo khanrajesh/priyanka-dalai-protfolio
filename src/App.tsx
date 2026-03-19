@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react';
 import { 
   Mail, 
   Phone, 
@@ -30,8 +30,6 @@ import {
   Coffee,
   Rocket
 } from 'lucide-react';
-import { AnimatePresence } from 'motion/react';
-
 // --- Data ---
 const PERSONAL_INFO = {
   name: "Priyanka Dalai",
@@ -150,7 +148,7 @@ const ExperienceItem: React.FC<{ exp: typeof EXPERIENCES[0] }> = ({ exp }) => (
           <ul className="space-y-3">
             {proj.details.map((detail, i) => (
               <li key={i} className="flex items-start gap-3 text-sm text-zinc-400 leading-relaxed">
-                <ChevronRight className="w-4 h-4 mt-0.5 text-emerald-500/50 shrink-0" />
+                <ChevronRight className="w-4 h-4 mt-1 text-emerald-500/50 shrink-0" />
                 <span>
                   {detail.includes("team") || detail.includes("Lead") || detail.includes("POC") || detail.includes("Spearheaded") ? (
                     <span className="text-zinc-200 font-medium">{detail}</span>
@@ -164,6 +162,103 @@ const ExperienceItem: React.FC<{ exp: typeof EXPERIENCES[0] }> = ({ exp }) => (
     </div>
   </div>
 );
+
+const JugglingBubbles: React.FC<{ mousePos: { x: number; y: number }, isEnabled: boolean }> = ({ mousePos, isEnabled }) => {
+  const { scrollY } = useScroll();
+  
+  const bubbles = React.useMemo(() => 
+    Array.from({ length: 30 }).map((_, i) => ({
+      id: i,
+      size: Math.random() * 15 + 5,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      // Random factors for unique movement
+      stiffness: Math.random() * 50 + 20,
+      damping: Math.random() * 20 + 10,
+      mass: Math.random() * 0.5 + 0.5,
+      scrollSpeed: Math.random() * 0.5 + 0.2, // Parallax factor
+    })), 
+  []);
+
+  if (!isEnabled) return null;
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {bubbles.map((b) => (
+        <Bubble key={b.id} b={b} mousePos={mousePos} scrollY={scrollY} />
+      ))}
+    </div>
+  );
+};
+
+const Bubble: React.FC<{ b: any, mousePos: { x: number, y: number }, scrollY: any }> = ({ b, mousePos, scrollY }) => {
+  // Combine scroll parallax and mouse-reactive offset into a single vertical movement
+  const scrollYOffset = useTransform(scrollY, [0, 2000], [0, -500 * b.scrollSpeed]);
+  
+  // Calculate mouse offset
+  const mouseXOffset = (mousePos.x - (window.innerWidth / 2)) * (b.id % 5 / 10);
+  const mouseYOffset = (mousePos.y - (window.innerHeight / 2)) * (b.id % 3 / 10);
+
+  return (
+    <motion.div
+      className="absolute rounded-full border border-emerald-500/20 bg-emerald-500/5 backdrop-blur-[1px]"
+      style={{
+        width: b.size,
+        height: b.size,
+        left: `${b.x}%`,
+        top: `${b.y}%`,
+        y: scrollYOffset, // Scroll-based parallax
+      }}
+      animate={{
+        // Mouse-based movement
+        x: mouseXOffset,
+        translateY: mouseYOffset, // Using translateY to avoid conflict with y (scroll)
+        scale: [1, 1.1, 1],
+      }}
+      transition={{
+        x: { type: 'spring', stiffness: b.stiffness, damping: b.damping, mass: b.mass },
+        translateY: { type: 'spring', stiffness: b.stiffness, damping: b.damping, mass: b.mass },
+        scale: {
+          duration: 2 + Math.random() * 2,
+          repeat: Infinity,
+          ease: "easeInOut"
+        }
+      }}
+    />
+  );
+};
+
+const ReactiveBackground: React.FC<{ isEnabled: boolean }> = ({ isEnabled }) => {
+  const [mousePos, setMousePos] = React.useState({ x: 0, y: 0 });
+  const { scrollY } = useScroll();
+  const gridY = useTransform(scrollY, [0, 2000], [0, -100]);
+
+  React.useEffect(() => {
+    if (!isEnabled) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [isEnabled]);
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+      {/* Unified Grid Pattern */}
+      <motion.div 
+        className="absolute inset-0 opacity-[0.02]"
+        style={{
+          backgroundImage: `radial-gradient(circle at 2px 2px, #10b981 1px, transparent 0)`,
+          backgroundSize: '80px 80px',
+          y: gridY,
+        }}
+      />
+
+      {/* Juggling Bubbles */}
+      <JugglingBubbles mousePos={mousePos} isEnabled={isEnabled} />
+    </div>
+  );
+};
 
 const CustomCursor: React.FC = () => {
   const [mousePos, setMousePos] = React.useState({ x: 0, y: 0 });
@@ -210,7 +305,7 @@ const CustomCursor: React.FC = () => {
         transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.5 }}
       />
       <motion.div
-        className="fixed top-0 left-0 w-8 h-8 border border-emerald-500/30 rounded-full pointer-events-none z-[9998]"
+        className="fixed top-0 left-0 w-8 h-8 border border-emerald-500/30 rounded-full pointer-events-none z-[9998] mix-blend-difference"
         animate={{
           x: mousePos.x - 16,
           y: mousePos.y - 16,
@@ -349,9 +444,11 @@ const ContactModal: React.FC<{ isOpen: boolean, onClose: () => void }> = ({ isOp
 
 export default function App() {
   const [isContactOpen, setIsContactOpen] = React.useState(false);
+  const [isEffectEnabled, setIsEffectEnabled] = React.useState(true);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-300 font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
+    <div className={`min-h-screen bg-zinc-950 text-zinc-300 font-sans selection:bg-emerald-500/30 selection:text-emerald-200 cursor-none ${isEffectEnabled ? 'fx-enabled' : ''}`}>
+      <ReactiveBackground isEnabled={isEffectEnabled} />
       <CustomCursor />
       <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
       {/* Decorative Elements */}
@@ -363,6 +460,19 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <span className="font-black text-xl tracking-tighter text-zinc-100">PD<span className="text-emerald-500">.</span></span>
           <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 mr-2">
+              <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest hidden sm:block">FX</span>
+              <button 
+                onClick={() => setIsEffectEnabled(!isEffectEnabled)}
+                className={`w-10 h-5 rounded-full p-1 transition-colors duration-300 flex items-center ${isEffectEnabled ? 'bg-emerald-600' : 'bg-zinc-800'}`}
+              >
+                <motion.div 
+                  animate={{ x: isEffectEnabled ? 20 : 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className="w-3 h-3 bg-white rounded-full shadow-sm"
+                />
+              </button>
+            </div>
             <button onClick={() => setIsContactOpen(true)} className="text-zinc-500 hover:text-emerald-500 transition-colors"><Mail className="w-5 h-5" /></button>
             <a href={PERSONAL_INFO.linkedin} target="_blank" className="text-zinc-500 hover:text-emerald-500 transition-colors"><Linkedin className="w-5 h-5" /></a>
             <a href={PERSONAL_INFO.github} target="_blank" className="text-zinc-500 hover:text-emerald-500 transition-colors"><Github className="w-5 h-5" /></a>
@@ -483,23 +593,23 @@ export default function App() {
 
               <div>
                 <h2 className="text-xs font-bold text-zinc-600 uppercase tracking-[0.3em] mb-6">Certifications</h2>
-                <div className="space-y-4">
-                  <div className="flex gap-4">
-                    <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-800 h-fit">
+                <div className="space-y-6">
+                  <div className="flex gap-4 items-start">
+                    <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-800 h-fit shrink-0">
                       <Award className="w-5 h-5 text-emerald-500" />
                     </div>
-                    <div>
-                      <h4 className="font-bold text-zinc-200">Python Automation</h4>
-                      <p className="text-xs text-zinc-500">Advanced Testing Frameworks</p>
+                    <div className="flex flex-col gap-1">
+                      <h4 className="font-bold text-zinc-200 leading-none">Python Automation</h4>
+                      <p className="text-xs text-zinc-500 leading-relaxed">Advanced Testing Frameworks</p>
                     </div>
                   </div>
-                  <div className="flex gap-4">
-                    <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-800 h-fit">
+                  <div className="flex gap-4 items-start">
+                    <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-800 h-fit shrink-0">
                       <Award className="w-5 h-5 text-emerald-500" />
                     </div>
-                    <div>
-                      <h4 className="font-bold text-zinc-200">Java Foundations</h4>
-                      <p className="text-xs text-zinc-500">Java Technocrat</p>
+                    <div className="flex flex-col gap-1">
+                      <h4 className="font-bold text-zinc-200 leading-none">Java Foundations</h4>
+                      <p className="text-xs text-zinc-500 leading-relaxed">Java Technocrat</p>
                     </div>
                   </div>
                 </div>
@@ -511,20 +621,20 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-zinc-900 py-20 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="text-center md:text-left">
-            <h2 className="text-2xl font-black text-zinc-100 mb-2 tracking-tighter">LET'S CONNECT</h2>
-            <p className="text-zinc-500 text-sm">Available for roles in Software Test Engineering.</p>
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-12">
+          <div className="text-center md:text-left flex flex-col gap-3">
+            <h2 className="text-2xl font-black text-zinc-100 tracking-tighter leading-none">LET'S CONNECT</h2>
+            <p className="text-zinc-500 text-sm leading-relaxed">Available for roles in Software Test Engineering.</p>
           </div>
-          <div className="flex gap-4">
-            <button onClick={() => setIsContactOpen(true)} className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-emerald-500 transition-colors">
-              <Mail className="w-6 h-6" />
+          <div className="flex gap-4 shrink-0">
+            <button onClick={() => setIsContactOpen(true)} className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-emerald-500 transition-colors group">
+              <Mail className="w-6 h-6 text-zinc-500 group-hover:text-emerald-500 transition-colors" />
             </button>
-            <a href={PERSONAL_INFO.linkedin} target="_blank" className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-emerald-500 transition-colors">
-              <Linkedin className="w-6 h-6" />
+            <a href={PERSONAL_INFO.linkedin} target="_blank" className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-emerald-500 transition-colors group">
+              <Linkedin className="w-6 h-6 text-zinc-500 group-hover:text-emerald-500 transition-colors" />
             </a>
-            <a href={PERSONAL_INFO.github} target="_blank" className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-emerald-500 transition-colors">
-              <Github className="w-6 h-6" />
+            <a href={PERSONAL_INFO.github} target="_blank" className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-emerald-500 transition-colors group">
+              <Github className="w-6 h-6 text-zinc-500 group-hover:text-emerald-500 transition-colors" />
             </a>
           </div>
         </div>
@@ -543,6 +653,40 @@ export default function App() {
           .outline-text {
             -webkit-text-stroke: 2px #27272a;
           }
+        }
+        
+        /* Interactive Text Jump Effect */
+        .fx-enabled h1, 
+        .fx-enabled h2, 
+        .fx-enabled h3, 
+        .fx-enabled h4, 
+        .fx-enabled p, 
+        .fx-enabled li,
+        .fx-enabled nav a,
+        .fx-enabled nav button:not(.w-10) {
+          transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.3s ease;
+          width: fit-content;
+        }
+        
+        /* Ensure transform works on these elements without breaking layout */
+        .fx-enabled h1, .fx-enabled h2, .fx-enabled h3, .fx-enabled h4, .fx-enabled p {
+          display: block;
+        }
+        
+        .fx-enabled nav a, .fx-enabled nav button:not(.w-10) {
+          display: inline-block;
+        }
+        
+        .fx-enabled h1:hover, 
+        .fx-enabled h2:hover, 
+        .fx-enabled h3:hover, 
+        .fx-enabled h4:hover, 
+        .fx-enabled p:hover, 
+        .fx-enabled li:hover,
+        .fx-enabled nav a:hover,
+        .fx-enabled nav button:not(.w-10):hover {
+          transform: translateY(-4px) scale(1.01);
+          color: #10b981; /* Emerald-500 */
         }
       `}} />
     </div>
